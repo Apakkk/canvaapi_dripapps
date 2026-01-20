@@ -36,6 +36,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [importing, setImporting] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   /**
    * Check auth status on mount and after OAuth redirect
@@ -137,6 +138,7 @@ function App() {
     try {
       setImporting(design.designId);
       setError(null);
+      setSuccessMessage(null);
       console.log(`Importing design: ${design.designId}`);
 
       const result: ImportResult = await importDesign(design.designId);
@@ -144,17 +146,21 @@ function App() {
       if (result.success && result.imageUrl) {
         console.log(`Import successful: ${result.imageUrl}`);
 
+        const updatedDesign = { ...design, imported: true, localImageUrl: result.imageUrl };
+
         // Update design in list
         setDesigns(prev => prev.map(d =>
-          d.designId === design.designId
-            ? { ...d, imported: true, localImageUrl: result.imageUrl }
-            : d
+          d.designId === design.designId ? updatedDesign : d
         ));
 
-        // Update selected design if it's the one we imported
-        if (selectedDesign?.designId === design.designId) {
-          setSelectedDesign({ ...design, imported: true, localImageUrl: result.imageUrl });
-        }
+        // Auto-select the imported design to show in preview
+        setSelectedDesign(updatedDesign);
+
+        // Show success message
+        setSuccessMessage(`"${design.title}" başarıyla import edildi! 🎉`);
+
+        // Clear success message after 5 seconds
+        setTimeout(() => setSuccessMessage(null), 5000);
       } else {
         console.error('Import failed:', result.error);
         setError(result.error || 'Import failed');
@@ -209,6 +215,7 @@ function App() {
       </header>
 
       {error && <div className="error-banner">{error}</div>}
+      {successMessage && <div className="success-banner">{successMessage}</div>}
 
       <main className="main">
         {/* Design list */}
