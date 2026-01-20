@@ -1,0 +1,52 @@
+# ===========================================
+# Canva Integration MVP - Application Config
+# ===========================================
+
+server:
+  port: 8080
+
+spring:
+  application:
+    name: canva-integration
+
+# ===========================================
+# Canva API Configuration
+# These values MUST be provided via environment variables
+# ===========================================
+canva:
+  api:
+    # Canva Connect API base URL
+    base-url: https://api.canva.com/rest/v1
+    # OAuth endpoints
+    authorization-url: https://www.canva.com/api/oauth/authorize
+    token-url: https://api.canva.com/rest/v1/oauth/token
+    # Client credentials (from environment variables)
+    client-id: ${CANVA_CLIENT_ID}
+    client-secret: ${CANVA_CLIENT_SECRET}
+    # Redirect URI for OAuth callback
+    redirect-uri: http://127.0.0.1:8080/api/canva/callback
+    # Required OAuth scopes for our MVP
+    # - design:meta:read - to list designs
+    # - design:content:read - to export designs as PNG
+    scopes: design:meta:read design:content:read
+
+# ===========================================
+# File Upload Configuration
+# ===========================================
+upload:
+  # Local directory to store imported PNG files
+  directory: ./uploads
+
+# ===========================================
+# CORS Configuration
+# ===========================================
+cors:
+  allowed-origins: http://127.0.0.1:5173
+
+# ===========================================
+# Logging
+# ===========================================
+logging:
+  level:
+    com.dripapps: DEBUG
+    org.springframework.web: INFO
