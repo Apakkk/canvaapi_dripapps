@@ -287,6 +287,7 @@ public class CanvaApiService {
 
     /**
      * Downloads the PNG from Canva's temporary URL and saves it locally.
+     * Note: Canva URLs may be double-encoded, so we decode them first.
      */
     private Path downloadPng(String downloadUrl, String designId) throws IOException {
         // Ensure upload directory exists
@@ -295,22 +296,59 @@ public class CanvaApiService {
 
         Path filePath = uploadDir.resolve(designId + ".png");
 
-        // Download using WebClient
-        DataBuffer buffer = webClient.get()
-                .uri(downloadUrl)
-                .retrieve()
-                .bodyToMono(DataBuffer.class)
-                .block();
+        // Decode URL if it's double-encoded
+        String decodedUrl = downloadUrl;
+        try {
+            // Check if URL is double-encoded (contains %25 which is encoded %)
+            if (downloadUrl.contains("%25")) {
+                decodedUrl = java.net.URLDecoder.decode(downloadUrl, java.nio.charset.StandardCharsets.UTF_8);
+                log.info("Decoded URL from: {} to: {}", downloadUrl.substring(0, Math.min(100, downloadUrl.length())),
+                        decodedUrl.substring(0, Math.min(100, decodedUrl.length())));
+            }
+        } catch (Exception e) {
+            log.warn("Failed to decode URL, using original: {}", e.getMessage());
+        }
 
-        if (buffer != null) {
-            byte[] bytes = new byte[buffer.readableByteCount()];
-            buffer.read(bytes);
-            DataBufferUtils.release(buffer);
+        log.info("Downloading PNG from: {}", decodedUrl.substring(0, Math.min(100, decodedUrl.length())) + "...");
 
-            Files.write(filePath, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
-            log.info("Downloaded PNG: {} bytes", bytes.length);
-        } else {
-            throw new IOException("Failed to download PNG - empty response");
+        // Download using WebClient with proper URI handling
+        try {
+            DataBuffer buffer = webClient.get()
+                    .uri(java.net.URI.create(decodedUrl))
+                    .retrieve()
+                    .bodyToMono(DataBuffer.class)
+                    .block();
+
+            if (buffer != null) {
+                byte[] bytes = new byte[buffer.readableByteCount()];
+                buffer.read(bytes);
+                DataBufferUtils.release(buffer);
+
+                Files.write(filePath, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                log.info("Downloaded PNG: {} bytes to {}", bytes.length, filePath);
+            } else {
+                throw new IOException("Failed to download PNG - empty response");
+            }
+        } catch (Exception e) {
+            log.error("WebClient download failed, trying with HttpURLConnection: {}", e.getMessage());
+
+            // Fallback: use HttpURLConnection for more reliable download
+            java.net.URL url = java.net.URI.create(decodedUrl).toURL();
+            java.net.HttpURLConnection conn = (java.net.HttpURLConnection) url.openConnection();
+            conn.setRequestMethod("GET");
+            conn.setConnectTimeout(30000);
+            conn.setReadTimeout(60000);
+
+            int responseCode = conn.getResponseCode();
+            if (responseCode == 200) {
+                try (java.io.InputStream in = conn.getInputStream()) {
+                    byte[] bytes = in.readAllBytes();
+                    Files.write(filePath, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING);
+                    log.info("Downloaded PNG via HttpURLConnection: {} bytes to {}", bytes.length, filePath);
+                }
+            } else {
+                throw new IOException("HTTP " + responseCode + " from download URL");
+            }
         }
 
         return filePath;
